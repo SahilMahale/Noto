@@ -1,0 +1,868 @@
+openapi: 3.1.0
+info:
+  title: Nōto API
+  version: 1.0.0
+  description: |
+    Backend contract for Nōto — notes, secrets, tasks, epics, sprints and teams.
+    Derived from the interactive mockup (Noto - standalone.html). All endpoints except
+    `/auth/*` require a Bearer JWT (RS256). IDs are server-generated UUIDs.
+    Secrets' `password` fields are encrypted at rest and never returned by list endpoints.
+servers:
+  - url: http://localhost:8080/api/v1
+security:
+  - bearerAuth: []
+tags:
+  - { name: Auth }
+  - { name: Account }
+  - { name: Notes }
+  - { name: Labels }
+  - { name: Teams }
+  - { name: Tasks }
+  - { name: Epics }
+  - { name: Sprints }
+  - { name: Directory }
+
+paths:
+  # ───────────────────────────── AUTH ─────────────────────────────
+  /auth/signup:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Create an account (Sign up screen)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, maxLength: 80 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, writeOnly: true }
+      responses:
+        "201": { $ref: "#/components/responses/AuthTokens" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Validation" }
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Log in (Log in screen)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, writeOnly: true }
+      responses:
+        "200": { $ref: "#/components/responses/AuthTokens" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Exchange a refresh token for a new access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties: { refreshToken: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/AuthTokens" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current refresh token (Sign out)
+      responses:
+        "204": { description: Signed out }
+
+  # ─────────────────────────── VAULT / ACCOUNT ───────────────────────────
+  /vault/unlock:
+    post:
+      tags: [Account]
+      summary: Unlock the vault with the master password (Lock screen)
+      description: |
+        Returns a short-lived `vaultToken` that must be sent as `X-Vault-Token` on any
+        request that reads or writes secret `password` fields or private-note bodies.
+        Expiry follows the user's `autoLockMinutes` preference.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [masterPassword]
+              properties: { masterPassword: { type: string, writeOnly: true } }
+      responses:
+        "200":
+          description: Unlocked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vaultToken: { type: string }
+                  expiresAt: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /vault/lock:
+    post:
+      tags: [Account]
+      summary: Invalidate the vault token (Lock vault)
+      responses:
+        "204": { description: Locked }
+
+  /me:
+    get:
+      tags: [Account]
+      summary: Current user profile + preferences (Profile & settings)
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/User" } } }
+    patch:
+      tags: [Account]
+      summary: Update profile or preferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                preferences: { $ref: "#/components/schemas/Preferences" }
+      responses:
+        "200":
+          description: Updated
+          content: { application/json: { schema: { $ref: "#/components/schemas/User" } } }
+        "422": { $ref: "#/components/responses/Validation" }
+  /me/password:
+    put:
+      tags: [Account]
+      summary: Change master password (Security section)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string, writeOnly: true }
+                newPassword: { type: string, minLength: 8, writeOnly: true }
+      responses:
+        "204": { description: Password changed; all vault tokens revoked }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  # ───────────────────────────── NOTES ─────────────────────────────
+  /notes:
+    get:
+      tags: [Notes]
+      summary: List notes (Notes grid, sidebar filters, search)
+      parameters:
+        - in: query
+          name: view
+          schema: { type: string, enum: [all, secrets, archive, trash], default: all }
+        - in: query
+          name: label
+          schema: { type: string, format: uuid }
+          description: Filter to one label id
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Full-text over title, body, site, username, label
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+      responses:
+        "200":
+          description: Pinned first, then newest. Secret `password` is omitted here.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Note" } }
+                  nextPage: { type: integer, nullable: true }
+    post:
+      tags: [Notes]
+      summary: Create a note or secret (compose bar → editor)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/NoteInput" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Note" } } }
+        "422": { $ref: "#/components/responses/Validation" }
+  /notes/{noteId}:
+    parameters: [{ $ref: "#/components/parameters/NoteId" }]
+    get:
+      tags: [Notes]
+      summary: Get one note (editor). Private/secret content needs X-Vault-Token.
+      parameters: [{ $ref: "#/components/parameters/VaultToken" }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Note" } } }
+        "403": { $ref: "#/components/responses/VaultLocked" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Notes]
+      summary: Update any field — title, body, secret fields, label, color, pinned, private, secret toggle
+      parameters: [{ $ref: "#/components/parameters/VaultToken" }]
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/NoteInput" } } }
+      responses:
+        "200":
+          description: Updated
+          content: { application/json: { schema: { $ref: "#/components/schemas/Note" } } }
+        "403": { $ref: "#/components/responses/VaultLocked" }
+    delete:
+      tags: [Notes]
+      summary: Delete forever (Trash → DELETE FOREVER)
+      responses:
+        "204": { description: Deleted }
+  /notes/{noteId}/archive:
+    parameters: [{ $ref: "#/components/parameters/NoteId" }]
+    post:
+      tags: [Notes]
+      summary: Archive (unpins)
+      responses: { "200": { $ref: "#/components/responses/NoteOK" } }
+    delete:
+      tags: [Notes]
+      summary: Unarchive
+      responses: { "200": { $ref: "#/components/responses/NoteOK" } }
+  /notes/{noteId}/trash:
+    parameters: [{ $ref: "#/components/parameters/NoteId" }]
+    post:
+      tags: [Notes]
+      summary: Move to trash (unpins)
+      responses: { "200": { $ref: "#/components/responses/NoteOK" } }
+    delete:
+      tags: [Notes]
+      summary: Restore from trash
+      responses: { "200": { $ref: "#/components/responses/NoteOK" } }
+  /notes/{noteId}/secret:
+    parameters: [{ $ref: "#/components/parameters/NoteId" }]
+    get:
+      tags: [Notes]
+      summary: Reveal the decrypted password (Eye / Copy on a secret card)
+      parameters: [{ $ref: "#/components/parameters/VaultToken" }]
+      responses:
+        "200":
+          description: Decrypted once; not cached server-side
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { password: { type: string } }
+        "403": { $ref: "#/components/responses/VaultLocked" }
+  /notes/generate-password:
+    post:
+      tags: [Notes]
+      summary: Generate a password (Password generator panel)
+      description: Client may also generate locally with crypto.getRandomValues; this keeps rules server-consistent.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                length: { type: integer, minimum: 8, maximum: 40, default: 16 }
+                upper: { type: boolean, default: true }
+                numbers: { type: boolean, default: true }
+                symbols: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Ambiguous characters (il1o0IO) excluded
+          content:
+            application/json:
+              schema: { type: object, properties: { password: { type: string } } }
+
+  # ───────────────────────────── LABELS ─────────────────────────────
+  /labels:
+    get:
+      tags: [Labels]
+      summary: List labels (sidebar + editor chips)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Label" } }
+    post:
+      tags: [Labels]
+      summary: Create a label (sidebar "New label" / editor "+ NEW")
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 24 }
+                color: { type: string, description: "Hex; server assigns from the chart palette if omitted" }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Label" } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /labels/{labelId}:
+    parameters:
+      - { in: path, name: labelId, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [Labels]
+      summary: Rename / recolor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { name: { type: string }, color: { type: string } }
+      responses:
+        "200":
+          description: Updated
+          content: { application/json: { schema: { $ref: "#/components/schemas/Label" } } }
+    delete:
+      tags: [Labels]
+      summary: Delete label (notes keep everything else; label cleared)
+      responses: { "204": { description: Deleted } }
+
+  # ───────────────────────────── TEAMS ─────────────────────────────
+  /teams:
+    get:
+      tags: [Teams]
+      summary: My teams with members and open-task counts (Teams tab, sidebar, scope dropdown)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Team" } }
+    post:
+      tags: [Teams]
+      summary: Create a team (+ NEW TEAM). Creator becomes Owner/admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 24 }
+                color: { type: string }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Team" } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /teams/{teamId}:
+    parameters: [{ $ref: "#/components/parameters/TeamId" }]
+    get:
+      tags: [Teams]
+      summary: Team detail (management modal)
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/Team" } } }
+    patch:
+      tags: [Teams]
+      summary: Rename / recolor — admin only
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { name: { type: string }, color: { type: string } }
+      responses:
+        "200":
+          description: Updated
+          content: { application/json: { schema: { $ref: "#/components/schemas/Team" } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      tags: [Teams]
+      summary: Delete team and all its tasks/epics — admin only (DELETE TEAM)
+      responses:
+        "204": { description: Deleted }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /teams/{teamId}/members:
+    parameters: [{ $ref: "#/components/parameters/TeamId" }]
+    post:
+      tags: [Teams]
+      summary: Add a member — admin only (ADD in management modal)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { type: string, format: uuid, description: "From /directory suggestions" }
+                role: { type: string, maxLength: 24, default: Member }
+                admin: { type: boolean, default: false }
+      responses:
+        "201":
+          description: Added
+          content: { application/json: { schema: { $ref: "#/components/schemas/TeamMember" } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /teams/{teamId}/members/{userId}:
+    parameters:
+      - { $ref: "#/components/parameters/TeamId" }
+      - { in: path, name: userId, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [Teams]
+      summary: Change role / admin flag — admin only
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { role: { type: string }, admin: { type: boolean } }
+      responses:
+        "200":
+          description: Updated
+          content: { application/json: { schema: { $ref: "#/components/schemas/TeamMember" } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      tags: [Teams]
+      summary: Remove member — admin only; cannot remove the last admin
+      responses:
+        "204": { description: Removed }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /directory:
+    get:
+      tags: [Directory]
+      summary: User suggestions by name or email (member autocomplete)
+      parameters:
+        - { in: query, name: q, required: true, schema: { type: string, minLength: 1 } }
+        - { in: query, name: excludeTeam, schema: { type: string, format: uuid }, description: "Omit existing members of this team" }
+        - { in: query, name: limit, schema: { type: integer, default: 5, maximum: 10 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/DirectoryUser" } }
+
+  # ───────────────────────────── TASKS ─────────────────────────────
+  /tasks:
+    get:
+      tags: [Tasks]
+      summary: List tasks for a scope (Board / Timeline)
+      parameters:
+        - { $ref: "#/components/parameters/Scope" }
+        - in: query
+          name: sprintId
+          schema: { type: string, format: uuid }
+          description: Filter to one sprint; omit for all sprints
+        - in: query
+          name: epicId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/TaskStatus" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Task" } }
+    post:
+      tags: [Tasks]
+      summary: Create a task (toolbar ADD → detail modal). Key is generated (NT-n).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TaskInput" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } }
+        "422": { $ref: "#/components/responses/Validation" }
+  /tasks/{taskId}:
+    parameters: [{ $ref: "#/components/parameters/TaskId" }]
+    get:
+      tags: [Tasks]
+      summary: Task detail incl. Markdown description and activity (Task detail modal)
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskDetail" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Tasks]
+      summary: Update title, description, status, priority, assignee, epic, sprint. Status/priority/assignee changes are logged to activity.
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/TaskInput" } } }
+      responses:
+        "200":
+          description: Updated
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskDetail" } } }
+    delete:
+      tags: [Tasks]
+      summary: Delete task
+      responses: { "204": { description: Deleted } }
+  /tasks/{taskId}/comments:
+    parameters: [{ $ref: "#/components/parameters/TaskId" }]
+    post:
+      tags: [Tasks]
+      summary: Add a comment (Activity → POST)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties: { body: { type: string, maxLength: 2000 } }
+      responses:
+        "201":
+          description: Appended to activity
+          content: { application/json: { schema: { $ref: "#/components/schemas/Activity" } } }
+
+  # ───────────────────────────── EPICS ─────────────────────────────
+  /epics:
+    get:
+      tags: [Epics]
+      summary: Epics for a scope with progress (Epics view, card chips, modal dropdown, timeline rows)
+      parameters: [{ $ref: "#/components/parameters/Scope" }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Epic" } }
+    post:
+      tags: [Epics]
+      summary: Create an epic (+ NEW EPIC / ADD on Epics view)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/EpicInput" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Epic" } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /epics/{epicId}:
+    parameters:
+      - { in: path, name: epicId, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Epics]
+      summary: Epic detail incl. its tasks (Epic detail modal)
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/EpicDetail" } } }
+    patch:
+      tags: [Epics]
+      summary: Update name, color, owner, status, start/target sprint, description
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/EpicInput" } } }
+      responses:
+        "200":
+          description: Updated
+          content: { application/json: { schema: { $ref: "#/components/schemas/EpicDetail" } } }
+    delete:
+      tags: [Epics]
+      summary: Delete epic (tasks keep everything else; epicId cleared)
+      responses: { "204": { description: Deleted } }
+
+  # ───────────────────────────── SPRINTS ─────────────────────────────
+  /sprints:
+    get:
+      tags: [Sprints]
+      summary: Sprints for a scope with dates (sprint dropdowns, tooltips, timeline columns)
+      parameters: [{ $ref: "#/components/parameters/Scope" }]
+      responses:
+        "200":
+          description: Ordered by startDate; exactly one may be `current`
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Sprint" } }
+    post:
+      tags: [Sprints]
+      summary: Create a sprint — team admin (or owner for personal)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SprintInput" } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Sprint" } } }
+  /sprints/{sprintId}:
+    parameters:
+      - { in: path, name: sprintId, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [Sprints]
+      summary: Update name/dates or mark as current
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/SprintInput" } } }
+      responses:
+        "200":
+          description: Updated
+          content: { application/json: { schema: { $ref: "#/components/schemas/Sprint" } } }
+    delete:
+      tags: [Sprints]
+      summary: Delete sprint (tasks' sprintId cleared)
+      responses: { "204": { description: Deleted } }
+
+# ═══════════════════════════════ COMPONENTS ═══════════════════════════════
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  parameters:
+    NoteId: { in: path, name: noteId, required: true, schema: { type: string, format: uuid } }
+    TaskId: { in: path, name: taskId, required: true, schema: { type: string, format: uuid } }
+    TeamId: { in: path, name: teamId, required: true, schema: { type: string, format: uuid } }
+    VaultToken:
+      in: header
+      name: X-Vault-Token
+      required: false
+      schema: { type: string }
+      description: From POST /vault/unlock. Required to read secret passwords or private-note content.
+    Scope:
+      in: query
+      name: scope
+      required: true
+      schema: { type: string }
+      description: "`personal` or a team id"
+      example: personal
+    Page: { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { in: query, name: pageSize, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
+
+  responses:
+    AuthTokens:
+      description: Tokens + profile
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              accessToken: { type: string }
+              refreshToken: { type: string }
+              user: { $ref: "#/components/schemas/User" }
+    NoteOK:
+      description: Updated note
+      content: { application/json: { schema: { $ref: "#/components/schemas/Note" } } }
+    Unauthorized: { description: Invalid credentials or token, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Forbidden: { description: Not allowed (e.g. not a team admin), content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    VaultLocked: { description: Vault token missing/expired — client should show the lock screen, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    NotFound: { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Conflict: { description: Duplicate name/email or invariant violated, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    Validation: { description: Body failed validation, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: VAULT_LOCKED }
+        message: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+
+    # ── account ──
+    Preferences:
+      type: object
+      properties:
+        defaultTab: { type: string, enum: [notes, tasks, teams], default: notes }
+        notesLayout: { type: string, enum: [masonry, grid, list], default: masonry }
+        maskSecrets: { type: boolean, default: true }
+        autoLockMinutes: { type: integer, enum: [1, 5, 15, 0], description: "0 = never", default: 5 }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, format: email }
+        initials: { type: string, example: AK }
+        preferences: { $ref: "#/components/schemas/Preferences" }
+        createdAt: { type: string, format: date-time }
+    DirectoryUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, format: email }
+        initials: { type: string }
+        defaultRole: { type: string, nullable: true, description: "Suggested role from the user's org profile" }
+
+    # ── notes ──
+    NoteColor:
+      type: string
+      enum: [default, blue, teal, violet, rose, green]
+    Label:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: string, example: "#78a9ff" }
+        noteCount: { type: integer, readOnly: true }
+    NoteInput:
+      type: object
+      properties:
+        secret: { type: boolean, description: "true = structured site/username/password; false = free-text body" }
+        private: { type: boolean, description: "Lockable — content withheld without a vault token" }
+        title: { type: string, maxLength: 200 }
+        body: { type: string, description: "Plain notes only" }
+        site: { type: string, description: "Secrets only" }
+        username: { type: string, description: "Secrets only" }
+        password: { type: string, writeOnly: true, description: "Secrets only — encrypted at rest" }
+        labelId: { type: string, format: uuid, nullable: true }
+        color: { $ref: "#/components/schemas/NoteColor" }
+        pinned: { type: boolean }
+    Note:
+      allOf:
+        - $ref: "#/components/schemas/NoteInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            label: { $ref: "#/components/schemas/Label", nullable: true }
+            hasPassword: { type: boolean, description: "Secret has a stored password (value via /notes/{id}/secret)" }
+            locked: { type: boolean, description: "true when private and the request had no valid vault token; body/site/username are then empty" }
+            archived: { type: boolean }
+            trashed: { type: boolean }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+
+    # ── teams ──
+    TeamMember:
+      type: object
+      properties:
+        userId: { type: string, format: uuid }
+        name: { type: string }
+        initials: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, example: Frontend }
+        admin: { type: boolean }
+    Team:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: string, example: "#78a9ff" }
+        members: { type: array, items: { $ref: "#/components/schemas/TeamMember" } }
+        openTaskCount: { type: integer, readOnly: true }
+        myRole: { type: string, readOnly: true, nullable: true }
+        iAmAdmin: { type: boolean, readOnly: true, description: "Drives the ADMIN badge and whether the card opens the management modal" }
+
+    # ── tasks ──
+    TaskStatus:
+      type: string
+      enum: [backlog, progress, review, done]
+    TaskPriority:
+      type: string
+      enum: [high, med, low]
+    TaskInput:
+      type: object
+      properties:
+        scope: { type: string, description: "`personal` or team id — required on create, immutable" }
+        title: { type: string, maxLength: 200 }
+        description: { type: string, description: "Markdown" }
+        status: { $ref: "#/components/schemas/TaskStatus" }
+        priority: { $ref: "#/components/schemas/TaskPriority" }
+        assigneeId: { type: string, format: uuid, nullable: true, description: "Must be a member of the scope team" }
+        epicId: { type: string, format: uuid, nullable: true }
+        sprintId: { type: string, format: uuid, nullable: true, description: "Defaults to the current sprint on create" }
+    Task:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string, example: NT-12, readOnly: true }
+        scope: { type: string }
+        title: { type: string }
+        status: { $ref: "#/components/schemas/TaskStatus" }
+        priority: { $ref: "#/components/schemas/TaskPriority" }
+        assignee: { $ref: "#/components/schemas/TeamMember", nullable: true }
+        epic:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            color: { type: string }
+        sprintId: { type: string, format: uuid, nullable: true }
+        updatedAt: { type: string, format: date-time }
+    Activity:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        at: { type: string, format: date-time }
+        actor: { $ref: "#/components/schemas/TeamMember" }
+        kind: { type: string, enum: [created, status, priority, assignee, epic, sprint, comment] }
+        text: { type: string, example: "Status → In Review" }
+    TaskDetail:
+      allOf:
+        - $ref: "#/components/schemas/Task"
+        - type: object
+          properties:
+            description: { type: string, description: "Markdown source" }
+            activity: { type: array, items: { $ref: "#/components/schemas/Activity" } }
+
+    # ── epics ──
+    EpicStatus:
+      type: string
+      enum: [todo, progress, done]
+    EpicInput:
+      type: object
+      properties:
+        scope: { type: string, description: "Required on create, immutable" }
+        name: { type: string, maxLength: 32 }
+        color: { type: string, description: "Hex; assigned from the epic palette if omitted" }
+        ownerId: { type: string, format: uuid, nullable: true }
+        status: { $ref: "#/components/schemas/EpicStatus" }
+        startSprintId: { type: string, format: uuid, nullable: true }
+        targetSprintId: { type: string, format: uuid, nullable: true }
+        description: { type: string, description: "Markdown" }
+    Epic:
+      allOf:
+        - $ref: "#/components/schemas/EpicInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            owner: { $ref: "#/components/schemas/TeamMember", nullable: true }
+            openCount: { type: integer, readOnly: true }
+            doneCount: { type: integer, readOnly: true }
+            spanSprintIds:
+              type: array
+              readOnly: true
+              items: { type: string, format: uuid }
+              description: "Sprints the timeline bar covers: explicit start→target if set, else derived from its tasks"
+    EpicDetail:
+      allOf:
+        - $ref: "#/components/schemas/Epic"
+        - type: object
+          properties:
+            tasks: { type: array, items: { $ref: "#/components/schemas/Task" } }
+
+    # ── sprints ──
+    SprintInput:
+      type: object
+      properties:
+        scope: { type: string, description: "Required on create, immutable" }
+        name: { type: string, example: Sprint 42 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        current: { type: boolean, description: "Setting true clears `current` on the scope's other sprints" }
+    Sprint:
+      allOf:
+        - $ref: "#/components/schemas/SprintInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            taskCount: { type: integer, readOnly: true }
