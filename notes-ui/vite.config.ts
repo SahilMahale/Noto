@@ -4,6 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import path from "path";
 
+const backendUrl = process.env.VITE_BACKEND_PROXY_TARGET || "http://localhost:8001";
+
 export default defineConfig({
   plugins: [TanStackRouterVite(), react(), tailwindcss()],
   resolve: {
@@ -13,8 +15,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/user": "http://localhost:8001",
-      "/notes": "http://localhost:8001",
+      "/user": backendUrl,
+      "/notes": backendUrl,
     },
   },
 });

@@ -1,4 +1,6 @@
-.PHONY: all backend frontend dev stop clean
+.PHONY: all backend frontend dev stop clean migrate-up migrate-down migrate-version
+
+DB_URL ?= postgres://noto:noto_dev_password@localhost:5432/noto?sslmode=disable
 
 # Run both backend and frontend
 dev:
@@ -38,3 +40,15 @@ build-backend:
 run-backend-bin:
 	@echo "Running backend binary..."
 	./notes-backend/bin/notes-server
+
+# Apply all pending DB migrations (see notes-backend/migrations/README.md)
+migrate-up:
+	migrate -path notes-backend/migrations -database "$(DB_URL)" up
+
+# Roll back one DB migration
+migrate-down:
+	migrate -path notes-backend/migrations -database "$(DB_URL)" down 1
+
+# Print current DB migration version
+migrate-version:
+	migrate -path notes-backend/migrations -database "$(DB_URL)" version

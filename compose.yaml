@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: docker.io/library/postgres:18
+    container_name: noto-postgres
+    environment:
+      POSTGRES_DB: noto
+      POSTGRES_USER: noto
+      POSTGRES_PASSWORD: noto_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - noto-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U noto -d noto"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pgadmin:
+    image: docker.io/dpage/pgadmin4:latest
+    container_name: noto-pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@noto.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - noto-pgadmin-data:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro,Z
+
+  backend:
+    build:
+      context: ./notes-backend
+      dockerfile: Dockerfile.dev
+    container_name: noto-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SERVER_BIND_TO: "0.0.0.0:8001"
+      APP_AUTH: "/app/secrets"
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./notes-backend:/app:Z
+      - noto-backend-gomod-cache:/go/pkg/mod
+    develop:
+      watch:
+        # .go/.html/.tpl/.tmpl source changes are live-reloaded in-container by air;
+        # no bind mount sync needed. Only dependency-manifest changes need a rebuild.
+        - path: ./notes-backend/go.mod
+          action: rebuild
+        - path: ./notes-backend/go.sum
+          action: rebuild
+
+  frontend:
+    build:
+      context: ./notes-ui
+      dockerfile: Dockerfile.dev
+    container_name: noto-frontend
+    depends_on:
+      - backend
+    environment:
+      VITE_BACKEND_PROXY_TARGET: "http://backend:8001"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./notes-ui:/app:Z
+      - noto-frontend-node-modules:/app/node_modules
+    develop:
+      watch:
+        # source changes are hot-reloaded in-container by Vite's dev server;
+        # only dependency-manifest changes need a rebuild (re-run bun install).
+        - path: ./notes-ui/package.json
+          action: rebuild
+        - path: ./notes-ui/bun.lock
+          action: rebuild
+
+volumes:
+  noto-postgres-data:
+  noto-pgadmin-data:
+  noto-backend-gomod-cache:
+  noto-frontend-node-modules:

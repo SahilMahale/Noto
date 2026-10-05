@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Noto (local)",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "noto",
+      "Username": "noto",
+      "SSLMode": "disable"
+    }
+  }
+}
