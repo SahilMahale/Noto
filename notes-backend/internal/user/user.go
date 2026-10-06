@@ -15,7 +15,7 @@ type UserDataController struct {
 
 type UserOps interface {
 	CreateUser(username, email, pass string) helper.MyHTTPErrors
-	LoginUser(username, pass string) (bool, helper.MyHTTPErrors)
+	LoginUser(username, pass string) (string, helper.MyHTTPErrors)
 }
 
 func NewUserController(db db.DbConnection) UserDataController {
@@ -33,7 +33,7 @@ func (u UserDataController) CreateUser(username, email, pass string) helper.MyHT
 			HttpCode: fiber.StatusInternalServerError,
 		}
 	}
-	user = db.User{Username: username, Email: email, Pass: string(hashPass)}
+	user = db.User{Name: username, Email: email, PasswordHash: string(hashPass)}
 
 	if err := u.DbInterface.Db.Create(&user); err.Error != nil {
 		myerr := helper.ErrorMatch(err.Error)
@@ -44,19 +44,21 @@ func (u UserDataController) CreateUser(username, email, pass string) helper.MyHT
 	}
 }
 
-func (u UserDataController) LoginUser(username, pass string) (bool, helper.MyHTTPErrors) {
-	user := db.User{Username: username}
+func (u UserDataController) LoginUser(username, pass string) (string, helper.MyHTTPErrors) {
+	user := db.User{Name: username}
 	res := u.DbInterface.Db.First(&user)
 	if res.Error != nil {
 		myerr := helper.ErrorMatch(res.Error)
-		return false, myerr
+		return "", myerr
 	}
-	err := bcrypt.CompareHashAndPassword([]byte(user.Pass), []byte(pass))
+	err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(pass))
 	if err != nil {
 		myerr := helper.ErrorMatch(err)
-		return false, myerr
+		return "", myerr
 	}
-	return true, helper.MyHTTPErrors{
+	return user.ID, helper.MyHTTPErrors{
 		Err: nil,
 	}
 }
+
+func (u UserDataController) RefreshToken(){}

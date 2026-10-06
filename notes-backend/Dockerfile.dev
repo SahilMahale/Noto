@@ -1,4 +1,4 @@
-FROM golang:1.23.2-bookworm
+FROM golang:1.26.4-bookworm
 
 RUN apt-get update && \
   apt-get install -y sqlite3 libsqlite3-dev && \

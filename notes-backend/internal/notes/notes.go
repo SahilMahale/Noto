@@ -28,7 +28,7 @@ func NewNoteController(db db.DbConnection) NotesController {
 func (b NotesController) CreateNote(title, body string) (string, helper.MyHTTPErrors) {
 	noteId := uuid.NewString()
 	note := db.Note{
-		NoteID: noteId,
+		ID: noteId,
 		Title:  title,
 		Body:   body,
 	}
@@ -50,7 +50,7 @@ func (n NotesController) GetAllNotes() (models.NotesResp, helper.MyHTTPErrors) {
 	}
 	for _, note := range notes {
 		notesList = append(notesList, models.NoteResp{
-			NoteID: note.NoteID,
+			NoteID: note.ID,
 			Title:  note.Title,
 			Body:   note.Body,
 		})
@@ -62,7 +62,7 @@ func (n NotesController) GetAllNotes() (models.NotesResp, helper.MyHTTPErrors) {
 
 func (n NotesController) DeleteNote(noteId string) helper.MyHTTPErrors {
 	note := db.Note{
-		NoteID: noteId,
+		ID: noteId,
 	}
 	err := n.DbInterface.Db.First(&note)
 	if err.Error != nil {
@@ -95,14 +95,14 @@ func (n NotesController) UpdateNote(noteID string, note models.NotePatchRequest)
 
 func (n NotesController) GetNote(noteID string) (models.NoteResp, helper.MyHTTPErrors) {
 	note := db.Note{
-		NoteID: noteID,
+		ID: noteID,
 	}
 	err := n.DbInterface.Db.First(&note)
 	if err.Error != nil {
 		return models.NoteResp{}, helper.ErrorMatch(err.Error)
 	}
 	return models.NoteResp{
-			NoteID: note.NoteID,
+			NoteID: note.ID,
 			Title:  note.Title,
 			Body:   note.Body,
 		}, helper.MyHTTPErrors{
