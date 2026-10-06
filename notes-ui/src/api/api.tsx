@@ -85,6 +85,7 @@ const userSignup = async (user: string, email: string, pass: string) => {
 };
 type authObj = {
   auth_token: string
+  refresh_token: string
 }
 const userLogin = async (user: string, pass: string): Promise<authObj> => {
   //let data;

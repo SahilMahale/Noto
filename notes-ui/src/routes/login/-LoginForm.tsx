@@ -23,15 +23,15 @@ export const LoginForm = ({ isAdmin = false }) => {
   const navigate = useNavigate();
 
   const { mutate, isPending, isPaused, isError, error } = useMutation({
-    mutationFn: ({ user, pass }: z.infer<typeof LoginFormSchema>): Promise<{ auth_token: string; }> => {
+    mutationFn: ({ user, pass }: z.infer<typeof LoginFormSchema>): Promise<{ auth_token: string; refresh_token: string; }> => {
       return userLogin(user, pass);
     },
-    onSuccess: async (data: { auth_token: string }) => {
+    onSuccess: async (data: { auth_token: string, refresh_token: string }) => {
       if (!setToken) {
         alert("Error: setToken function undefined")
         return
       }
-      await setToken(data.auth_token)
+      await setToken(data.auth_token, data.refresh_token)
       router.invalidate()
       navigate({ to: '/Home' }); //setToken does the routing cuz my router setup is ass
     },

@@ -25,23 +25,26 @@ export type Context = {
   isLoggedIn: boolean,
   claims: JWTclaims,
   token: string,
+  refreshToken: string,
   isRecovered: boolean,
 };
 
 export interface AppContext {
   Context: Context
-  setToken?(jwtToken: string): void
+  setToken?(jwtToken: string, refreshToken: string): void
   LogOut?(): Promise<boolean>
 }
 export type ActionType = {
   type: number,
   token?: string,
+  refreshToken?: string,
 }
 
 const initialContext: Context = {
   isLoggedIn: false,
   claims: { name: "dummy", type: "dummy" },
   token: '',
+  refreshToken: '',
   isRecovered: false,
 }
 
@@ -51,6 +54,7 @@ const reducer = (contextState: Context, action: ActionType): Context => {
       throw new Error("Error: the JWT was not Passed")
     }
     contextState.token = action.token;
+    contextState.refreshToken = action.refreshToken ?? '';
     contextState.claims = jwtDecode(action.token);
     contextState.isLoggedIn = true;
     localStorage.setItem('authard', JSON.stringify(contextState));
@@ -79,20 +83,17 @@ const reducer = (contextState: Context, action: ActionType): Context => {
     throw new Error('INVALID ACTION FOR REDUCER');
   }
 };
-const initialAppContext: AppContext = {
-  Context: initialContext,
-}
 
 let contextVal: AppContext
-export const AuthContext = createContext<AppContext>(initialAppContext);
+const AuthContext = createContext<AppContext | null>(null);
 
 const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const [appContext, dispatch] = useReducer(reducer, initialContext);
   console.log("---------------AUTH RELOAD----------------")
-  const SetToken = useCallback(async (jwtToken: string) => {
+  const SetToken = useCallback(async (jwtToken: string, refreshToken: string) => {
     try {
-      dispatch({ type: ACTIONS.LOGIN, token: jwtToken });
+      dispatch({ type: ACTIONS.LOGIN, token: jwtToken, refreshToken });
     }
     catch (e) {
       console.error(e)
