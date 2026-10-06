@@ -35,4 +35,5 @@ type UserSignin struct {
 }
 type JwtResp struct {
 	Authtoken string `json:"auth_token"`
+	Refreshtoken string `json:"refresh_token"`
 }

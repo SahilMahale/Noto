@@ -1,0 +1,38 @@
+pre-commit:
+  parallel: true
+
+  commands:
+    secrets:
+      run: >
+        git diff --staged --name-only -z |
+        xargs -0 detect-secrets-hook --baseline .secrets.baseline
+      fail_text: |
+        New secret detected. Do one of the following:
+          1. Remove the secret and use environment variables or a secrets manager instead.
+          2. If it's a false positive, add an inline comment:
+               # pragma: allowlist secret
+          3. To review and label findings:
+               detect-secrets audit .secrets.baseline
+
+    go-vet:
+      glob: "**/*.go"
+      run: go vet ./...
+      fail_text: "go vet found issues. Fix them before committing."
+
+    go-fmt:
+      glob: "**/*.go"
+      run: |
+        unformatted=$(gofmt -l .)
+        if [ -n "$unformatted" ]; then
+          echo "Run 'gofmt -w .' to fix these files:"
+          echo "$unformatted"
+          exit 1
+        fi
+      fail_text: "Run: gofmt -w ."
+
+pre-push:
+  commands:
+    go-test:
+      glob: "**/*.go"
+      run: go test ./...
+      fail_text: "Tests failed. Fix before pushing."

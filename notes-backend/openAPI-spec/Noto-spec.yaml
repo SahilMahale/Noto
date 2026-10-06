@@ -1,0 +1,176 @@
+openapi: 3.0.0
+info:
+  title: Noto-spec
+  version: 1.0.0
+servers:
+  - url: https://localhost:3001
+paths:
+  /notes/create:
+    post:
+      summary: Create
+      operationId: notes_create
+      tags:
+        - notes
+      responses:
+        '200':
+          description: ''
+      requestBody:
+        $ref: '#/components/requestBodies/create'
+  /notes/delete/{noteID}:
+    delete:
+      summary: Delete
+      operationId: notes_delete
+      tags:
+        - notes
+      responses:
+        '200':
+          description: ''
+      parameters:
+        - name: noteID
+          in: path
+          required: true
+          schema:
+            type: string
+  /notes/get:
+    get:
+      summary: All_notes
+      operationId: notes_get_all
+      tags:
+        - notes
+      responses:
+        '200':
+          description: ''
+  /notes/get/{noteID}:
+    get:
+      summary: by_ID
+      operationId: notes_get_by_id
+      tags:
+        - notes
+      responses:
+        '200':
+          description: ''
+      parameters:
+        - name: noteID
+          in: path
+          required: true
+          schema:
+            type: string
+  /notes/update/{noteID}:
+    patch:
+      summary: update
+      operationId: notes_update
+      tags:
+        - notes
+      responses:
+        '200':
+          description: ''
+      parameters:
+        - name: noteID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        $ref: '#/components/requestBodies/update'
+  /user/signin:
+    post:
+      summary: Login
+      operationId: user_login
+      tags:
+        - user
+      responses:
+        '200':
+          description: ''
+      requestBody:
+        $ref: '#/components/requestBodies/login'
+  /user/signup:
+    post:
+      summary: SignUP
+      operationId: user_signup
+      tags:
+        - user
+      responses:
+        '200':
+          description: ''
+      requestBody:
+        $ref: '#/components/requestBodies/signup'
+components:
+  schemas:
+    create:
+      type: object
+      required:
+        - title
+        - body
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+      example:
+        title: <string>
+        body: <string>
+    update:
+      type: object
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+      example:
+        body: <string>
+    login:
+      type: object
+      required:
+        - user
+        - pass
+      properties:
+        user:
+          type: string
+        pass:
+          type: string
+      example:
+        user: <string>
+        pass: <string>
+    signup:
+      type: object
+      required:
+        - user
+        - email
+        - pass
+      properties:
+        user:
+          type: string
+        email:
+          type: string
+        pass:
+          type: string
+      example:
+        user: <string>
+        email: <string>
+        pass: <string>
+  requestBodies:
+    create:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/create'
+      required: true
+    update:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/update'
+      required: false
+    login:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/login'
+      required: true
+    signup:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/signup'
+      required: true
+  securitySchemes: {}

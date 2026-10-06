@@ -6,9 +6,11 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	jwtware "github.com/gofiber/contrib/jwt"
+	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/log"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -30,7 +32,7 @@ func (B *notesService) initMiddleware() {
 	}))
 	B.app.Use(recover.New(recover.Config{EnableStackTrace: true}))
 	B.app.Use(cors.New(cors.Config{
-		AllowOrigins: "http://localhost:3000,http://localhost:4200,http://localhost:8080",
+		AllowOrigins: "http://localhost:3000/,http://localhost:4200/,http://localhost:8080/",
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 	}))
 }
@@ -52,10 +54,11 @@ func (B *notesService) initAuth() {
 		panic(err)
 	}
 	B.app.Use(jwtware.New(jwtware.Config{
-		SigningKey: jwtware.SigningKey{
+		SigningKey: jwtware.SigningKey{ //misleading - works more like a verification for asymm algos
 			JWTAlg: jwtware.RS256,
 			Key:    publicKey,
 		},
+		Filter:     allowedRouted,
 		ContextKey: "acces-key-token",
 	}))
 }
@@ -121,11 +124,20 @@ func readPublicKeyFile(path string) error {
 	return nil
 }
 
-func makeTokenWithClaims(username string) (token string, err error) {
+func allowedRouted(ctx *fiber.Ctx) bool {
+	path := ctx.Path()
+	if strings.Contains(path, "signin") || strings.Contains(path, "signup") || strings.Contains(path, "refresh") {
+		return true
+	}
+	return false
+}
+
+func makeTokenWithClaims(userID,username string) (token string, err error) {
 	// create claims for user
 	claims := MyCustomClaims{
 		Name: username,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Subject: userID,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 48)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
@@ -145,4 +157,16 @@ func makeTokenWithClaims(username string) (token string, err error) {
 		return "", errp
 	}
 	return token, nil
+}
+
+func getUserID(c *fiber.Ctx) (string, error) {
+      token, ok := c.Locals("acces-key-token").(*jwt.Token)
+      if !ok {
+              return "", fmt.Errorf("no token in context")
+      }
+      claims, ok := token.Claims.(*MyCustomClaims)
+      if !ok {
+              return "", fmt.Errorf("unexpected claims type")
+      }
+      return claims.Subject, nil 
 }

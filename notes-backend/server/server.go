@@ -140,17 +140,18 @@ func (B *notesService) LoginUser(c *fiber.Ctx) error {
 		return err
 	}
 
-	_, err := B.userCtrl.LoginUser(u.Username, u.Password)
+	userID, err := B.userCtrl.LoginUser(u.Username, u.Password)
 	if err.Err != nil {
 		return c.Status(err.HttpCode).SendString(err.Err.Error())
 	}
 
 	// Create a token based on user
-	atoken, errp := makeTokenWithClaims(u.Username)
+	atoken, errp := makeTokenWithClaims(userID,u.Username)
 
 	if errp != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString(errp.Error())
 	}
+	
 	resp := models.JwtResp{
 		Authtoken: atoken,
 	}
@@ -163,6 +164,7 @@ func (B *notesService) LoginUser(c *fiber.Ctx) error {
 func (B *notesService) StartNotesService() {
 	B.initMiddleware()
 	// Unauthenticated routes
+	B.initAuth()
 	userGroup := B.app.Group("/user")
 	userGroup.Post("/signup", B.CreateUser)
 	userGroup.Post("/signin", B.LoginUser)
@@ -170,7 +172,6 @@ func (B *notesService) StartNotesService() {
 	B.app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("Booking APP Service is Running!")
 	})
-	B.initAuth()
 	// authenticated routes
 
 	notesGroup := B.app.Group("/notes")

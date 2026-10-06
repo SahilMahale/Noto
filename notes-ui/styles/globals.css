@@ -1,0 +1,186 @@
+/* ============================================================
+   Nōto — carbonfox / oxocarbon theme
+   Tailwind v4 (CSS-first) + shadcn/ui (new-york, cssVariables)
+   ============================================================ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ---- shadcn token bridge (utilities read these) ---- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* ---- Nōto feature tokens → bg-secret, text-private, border-success, … ---- */
+  --color-secret: var(--secret);
+  --color-secret-foreground: var(--secret-foreground);
+  --color-private: var(--private);
+  --color-private-foreground: var(--private-foreground);
+  --color-success: var(--success);
+
+  /* surface between background and card (compose bar, hover rows, popovers) */
+  --color-surface: var(--surface);
+
+  /* note-card tints → bg-note-blue, bg-note-teal, … */
+  --color-note-default: var(--note-default);
+  --color-note-blue: var(--note-blue);
+  --color-note-teal: var(--note-teal);
+  --color-note-violet: var(--note-violet);
+  --color-note-rose: var(--note-rose);
+  --color-note-green: var(--note-green);
+}
+
+/* ============================================================
+   Palette — IBM Carbon gray ramp + oxocarbon accents.
+   Nōto is dark-only: :root and .dark are identical on purpose,
+   so the theme holds with or without a .dark class on <html>.
+   ============================================================ */
+:root,
+.dark {
+  --radius: 0rem; /* flat / sharp — Carbon aesthetic (was 0.625rem in the scaffold) */
+
+  /* neutrals */
+  --background: #161616;            /* gray-100 — app canvas            */
+  --foreground: #f2f4f8;            /* gray-10  — primary text          */
+
+  --card: #262626;                  /* gray-90  — cards, inputs         */
+  --card-foreground: #f2f4f8;
+  --popover: #1f1f1f;               /* raised surface                   */
+  --popover-foreground: #f2f4f8;
+  --surface: #1f1f1f;               /* compose bar, hover rows          */
+
+  --secondary: #262626;
+  --secondary-foreground: #f2f4f8;
+  --muted: #262626;
+  --muted-foreground: #8d8d8d;      /* gray-50 — secondary text/icons   */
+  --accent: #1f1f1f;                /* shadcn hover surface             */
+  --accent-foreground: #f2f4f8;
+
+  --border: #393939;                /* gray-80 — rules & dividers       */
+  --input: #393939;
+
+  /* roles */
+  --primary: #33b1ff;               /* oxocarbon blue                   */
+  --primary-foreground: #161616;    /* dark text on blue fills          */
+  --destructive: #ee5396;           /* magenta — delete/trash           */
+  --ring: #33b1ff;                  /* focus ring                       */
+
+  /* Nōto features */
+  --secret: #3ddbd9;                /* teal — secret/password mode      */
+  --secret-foreground: #161616;
+  --private: #be95ff;               /* purple — lockable private notes  */
+  --private-foreground: #161616;
+  --success: #42be65;               /* green — restore/unarchive/toast  */
+
+  /* note-card tints (Keep-style, dark) */
+  --note-default: #262626;
+  --note-blue: #21283b;
+  --note-teal: #16312f;
+  --note-violet: #2a2340;
+  --note-rose: #38202e;
+  --note-green: #1e3226;
+
+  /* label dots / charts */
+  --chart-1: #78a9ff;               /* Work                             */
+  --chart-2: #42be65;               /* Personal                         */
+  --chart-3: #be95ff;               /* Finance                          */
+  --chart-4: #3ddbd9;
+  --chart-5: #ff7eb6;
+
+  /* sidebar (shadcn sidebar primitives) */
+  --sidebar: #161616;
+  --sidebar-foreground: #a8a8a8;
+  --sidebar-primary: #33b1ff;
+  --sidebar-primary-foreground: #161616;
+  --sidebar-accent: #262626;
+  --sidebar-accent-foreground: #f2f4f8;
+  --sidebar-border: #262626;
+  --sidebar-ring: #33b1ff;
+}
+
+/* ---- IBM Plex (self-hosted, latin subset) ----
+   Sans is the variable font (wght 100–700); Mono is static 400/500/600.
+   Same files the mockup uses, so type matches it exactly. */
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("../assets/fonts/IBMPlexSans-VF-latin.woff2") format("woff2");
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("../assets/fonts/IBMPlexMono-Regular-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("../assets/fonts/IBMPlexMono-Medium-latin.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("../assets/fonts/IBMPlexMono-SemiBold-latin.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "IBM Plex Sans", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 30%, transparent);
+  }
+  ::placeholder {
+    color: #525252; /* gray-70 */
+  }
+}

@@ -1,0 +1,15 @@
+{
+  // Tailwind v4 is CSS-first: the "config" IS the CSS file with @theme.
+  // Point IntelliSense at the Nōto theme so bg-secret / bg-note-* etc. autocomplete.
+  "tailwindCSS.experimental.configFile": "notes-ui/styles/globals.css",
+
+  // Autocomplete inside cva(), cn(), clsx() calls too
+  "tailwindCSS.experimental.classRegex": [
+    ["cva\\(((?:[^()]|\\([^()]*\\))*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
+    ["cn\\(((?:[^()]|\\([^()]*\\))*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"],
+    ["clsx\\(((?:[^()]|\\([^()]*\\))*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
+  ],
+  "files.associations": {
+    "*.css": "tailwindcss"
+  }
+}
